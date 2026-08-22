@@ -137,6 +137,23 @@
             pointer-events: none;
             display: none;
         }
+        #mensagem {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffaa44;
+            font-size: 28px;
+            font-weight: bold;
+            z-index: 150;
+            pointer-events: none;
+            display: none;
+            text-shadow: 0 0 20px #ff880088;
+            background: rgba(0,0,0,0.6);
+            padding: 20px 40px;
+            border-radius: 20px;
+            border: 2px solid #ffaa44;
+        }
         @media (max-width: 600px) {
             #info { font-size: 14px; padding: 6px 16px; top: 10px; }
             #pontuacao { font-size: 16px; padding: 6px 14px; top: 55px; right: 15px; }
@@ -144,6 +161,7 @@
             #zumbisRestantes { font-size: 13px; padding: 4px 12px; top: 100px; left: 15px; }
             #gameover { font-size: 30px; padding: 30px 20px; }
             #instrucoes { font-size: 11px; padding: 6px 12px; bottom: 15px; }
+            #mensagem { font-size: 20px; padding: 15px 25px; }
         }
     </style>
 </head>
@@ -154,9 +172,11 @@
     <div id="zumbisRestantes">🧟 0</div>
     <div id="instrucoes">🖱️ Mover mouse para mirar | Clique para atirar | W A S D para mover</div>
     <div id="cooldown">⏳ Recarregando...</div>
+    <div id="mensagem">⚔️ PREPARE-SE! ⚔️</div>
     <div id="gameover">
         GAME OVER
         <span>Pontuação: <span id="pontuacaoFinal">0</span></span>
+        <span>Zumbis mortos: <span id="zumbisMortosFinal">0</span></span>
         <button id="reiniciar">🔄 REINICIAR</button>
     </div>
 
@@ -174,11 +194,11 @@
 
         // --- Cena ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a1a2e);
+        scene.background = new THREE.Color(0x0a0a1a);
 
         // --- Câmera (visão de cima) ---
-        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 16, 0);
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 18, 0);
         camera.lookAt(0, 0, 0);
 
         // --- Renderer ---
@@ -189,10 +209,10 @@
         document.body.appendChild(renderer.domElement);
 
         // --- Luzes ---
-        const ambient = new THREE.AmbientLight(0x334466, 0.6);
+        const ambient = new THREE.AmbientLight(0x334466, 0.5);
         scene.add(ambient);
 
-        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.0);
         dirLight.position.set(5, 20, 5);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048;
@@ -206,25 +226,30 @@
         dirLight.shadow.camera.far = 30;
         scene.add(dirLight);
 
-        const fillLight = new THREE.DirectionalLight(0x4488ff, 0.3);
+        const fillLight = new THREE.DirectionalLight(0x4488ff, 0.2);
         fillLight.position.set(-5, 10, -5);
         scene.add(fillLight);
 
+        // Luz vermelha ambiente para dar clima
+        const redLight = new THREE.PointLight(0xff2222, 0.1, 20);
+        redLight.position.set(0, 5, 0);
+        scene.add(redLight);
+
         // --- Arena (chão) ---
         const groundMat = new THREE.MeshStandardMaterial({
-            color: 0x1a2a3a,
+            color: 0x0a1a2a,
             roughness: 0.9,
             metalness: 0.1,
-            emissive: new THREE.Color(0x0a1a2a),
-            emissiveIntensity: 0.1
+            emissive: new THREE.Color(0x050a15),
+            emissiveIntensity: 0.2
         });
-        const ground = new THREE.Mesh(new THREE.CircleGeometry(9, 48), groundMat);
+        const ground = new THREE.Mesh(new THREE.CircleGeometry(10, 48), groundMat);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
         // Grade da arena
-        const gridHelper = new THREE.GridHelper(18, 18, 0x4488ff, 0x224466);
+        const gridHelper = new THREE.GridHelper(20, 20, 0x4488ff, 0x224466);
         gridHelper.position.y = 0.01;
         scene.add(gridHelper);
 
@@ -232,23 +257,23 @@
         const borderMat = new THREE.MeshStandardMaterial({
             color: 0x4488ff,
             emissive: new THREE.Color(0x4488ff),
-            emissiveIntensity: 0.15,
+            emissiveIntensity: 0.1,
             transparent: true,
-            opacity: 0.3
+            opacity: 0.2
         });
-        const border = new THREE.Mesh(new THREE.RingGeometry(8.5, 8.8, 48), borderMat);
+        const border = new THREE.Mesh(new THREE.RingGeometry(9.2, 9.5, 48), borderMat);
         border.rotation.x = -Math.PI / 2;
         border.position.y = 0.02;
         scene.add(border);
 
-        // --- Jogador (no centro) ---
+        // --- Jogador ---
         const playerGroup = new THREE.Group();
 
         // Corpo (esfera)
         const bodyMat = new THREE.MeshStandardMaterial({
             color: 0x44ddff,
             emissive: new THREE.Color(0x44ddff),
-            emissiveIntensity: 0.15,
+            emissiveIntensity: 0.1,
             roughness: 0.3,
             metalness: 0.1
         });
@@ -259,8 +284,8 @@
         playerGroup.add(body);
 
         // Olhos
-        const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.3 });
-        const eyeGeo = new THREE.SphereGeometry(0.12, 8, 8);
+        const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.2 });
+        const eyeGeo = new THREE.SphereGeometry(0.1, 8, 8);
         const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
         eye1.position.set(-0.2, 0.6, 0.45);
         playerGroup.add(eye1);
@@ -270,7 +295,7 @@
 
         // Pupilas
         const pupilMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
-        const pupilGeo = new THREE.SphereGeometry(0.05, 6, 6);
+        const pupilGeo = new THREE.SphereGeometry(0.04, 6, 6);
         const pupil1 = new THREE.Mesh(pupilGeo, pupilMat);
         pupil1.position.set(-0.2, 0.6, 0.55);
         playerGroup.add(pupil1);
@@ -278,33 +303,33 @@
         pupil2.position.set(0.2, 0.6, 0.55);
         playerGroup.add(pupil2);
 
-        // Arma (indicador de direção)
+        // Arma
         const gunMat = new THREE.MeshStandardMaterial({ color: 0x888899, metalness: 0.8, roughness: 0.3 });
-        const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.6, 6), gunMat);
+        const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.07, 0.5, 6), gunMat);
         gun.rotation.x = Math.PI / 2;
         gun.position.set(0, 0.4, 0.8);
         playerGroup.add(gun);
 
-        // Mira (ponto no chão)
+        // Mira no chão
         const targetMat = new THREE.MeshStandardMaterial({
             color: 0xff4444,
             emissive: 0xff4444,
             emissiveIntensity: 0.3,
             transparent: true,
-            opacity: 0.4
+            opacity: 0.3
         });
         const targetRing = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.25, 16), targetMat);
         targetRing.rotation.x = -Math.PI / 2;
         targetRing.position.set(0, 0.02, 1.2);
         playerGroup.add(targetRing);
 
-        // Círculo de luz embaixo do jogador
+        // Círculo de luz
         const glowMat = new THREE.MeshStandardMaterial({
             color: 0x44ddff,
             emissive: 0x44ddff,
             emissiveIntensity: 0.1,
             transparent: true,
-            opacity: 0.2
+            opacity: 0.15
         });
         const glow = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.8, 16), glowMat);
         glow.rotation.x = -Math.PI / 2;
@@ -316,30 +341,32 @@
 
         // --- Zumbis ---
         const zombies = [];
-        let maxZombies = 35;
+        let maxZombies = 50;
         let spawnTimer = 0;
-        let spawnInterval = 0.8;
+        let spawnInterval = 0.6;
+        let totalZombiesSpawned = 0;
+        let zombiesMortos = 0;
 
         function criarZumbi() {
             if (zombies.length >= maxZombies) return null;
 
-            // Posição nos cantos da arena
+            // Posição nas bordas da arena
             const lado = Math.floor(Math.random() * 4);
             let x, z;
-            const range = 7.5;
+            const range = 8.5;
             switch(lado) {
-                case 0: x = (Math.random() - 0.5) * 3 - range; z = (Math.random() - 0.5) * 3 - range; break;
-                case 1: x = (Math.random() - 0.5) * 3 + range; z = (Math.random() - 0.5) * 3 - range; break;
-                case 2: x = (Math.random() - 0.5) * 3 - range; z = (Math.random() - 0.5) * 3 + range; break;
-                case 3: x = (Math.random() - 0.5) * 3 + range; z = (Math.random() - 0.5) * 3 + range; break;
+                case 0: x = (Math.random() - 0.5) * 4 - range; z = (Math.random() - 0.5) * 4 - range; break;
+                case 1: x = (Math.random() - 0.5) * 4 + range; z = (Math.random() - 0.5) * 4 - range; break;
+                case 2: x = (Math.random() - 0.5) * 4 - range; z = (Math.random() - 0.5) * 4 + range; break;
+                case 3: x = (Math.random() - 0.5) * 4 + range; z = (Math.random() - 0.5) * 4 + range; break;
             }
-            x = Math.max(-8.2, Math.min(8.2, x));
-            z = Math.max(-8.2, Math.min(8.2, z));
+            x = Math.max(-9.0, Math.min(9.0, x));
+            z = Math.max(-9.0, Math.min(9.0, z));
 
             const grupo = new THREE.Group();
 
-            // Corpo do zumbi
-            const cores = [0x3a7a3a, 0x4a6a3a, 0x2a5a2a, 0x5a7a3a];
+            // Corpo do zumbi (tons de verde)
+            const cores = [0x3a8a3a, 0x4a7a3a, 0x2a6a2a, 0x5a8a3a, 0x3a7a4a];
             const cor = cores[Math.floor(Math.random() * cores.length)];
             const zMat = new THREE.MeshStandardMaterial({
                 color: cor,
@@ -353,9 +380,13 @@
             zBody.receiveShadow = true;
             grupo.add(zBody);
 
-            // Olhos vermelhos
-            const eyeZMat = new THREE.MeshStandardMaterial({ color: 0xff2222, emissive: 0xff0000, emissiveIntensity: 0.6 });
-            const eyeZGeo = new THREE.SphereGeometry(0.08, 6, 6);
+            // Olhos vermelhos brilhantes
+            const eyeZMat = new THREE.MeshStandardMaterial({ 
+                color: 0xff2222, 
+                emissive: 0xff0000, 
+                emissiveIntensity: 0.8 
+            });
+            const eyeZGeo = new THREE.SphereGeometry(0.09, 6, 6);
             const eyeZ1 = new THREE.Mesh(eyeZGeo, eyeZMat);
             eyeZ1.position.set(-0.15, 0.5, 0.35);
             grupo.add(eyeZ1);
@@ -363,39 +394,61 @@
             eyeZ2.position.set(0.15, 0.5, 0.35);
             grupo.add(eyeZ2);
 
-            // Boca (dentes)
+            // Boca
+            const bocaMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+            const boca = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.05), bocaMat);
+            boca.position.set(0, 0.38, 0.42);
+            grupo.add(boca);
+
+            // Dentes
             const denteMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
             for (let i = -1; i <= 1; i+=2) {
-                const dente = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.03), denteMat);
-                dente.position.set(i * 0.06, 0.38, 0.42);
+                const dente = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.03), denteMat);
+                dente.position.set(i * 0.05, 0.36, 0.44);
                 grupo.add(dente);
             }
 
-            // Braços
+            // Braços (esticados para frente)
             const armMat = new THREE.MeshStandardMaterial({ color: 0x2a5a2a });
-            const armGeo = new THREE.CylinderGeometry(0.05, 0.07, 0.4, 6);
+            const armGeo = new THREE.CylinderGeometry(0.05, 0.07, 0.5, 6);
             const arm1 = new THREE.Mesh(armGeo, armMat);
-            arm1.position.set(-0.5, 0.3, 0);
-            arm1.rotation.z = 0.3;
+            arm1.position.set(-0.45, 0.3, 0.2);
+            arm1.rotation.z = 0.2;
+            arm1.rotation.x = -0.3;
             grupo.add(arm1);
             const arm2 = new THREE.Mesh(armGeo, armMat);
-            arm2.position.set(0.5, 0.3, 0);
-            arm2.rotation.z = -0.3;
+            arm2.position.set(0.45, 0.3, 0.2);
+            arm2.rotation.z = -0.2;
+            arm2.rotation.x = -0.3;
             grupo.add(arm2);
 
-            // Buraco na cabeça
-            const holeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
-            const hole = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), holeMat);
-            hole.position.set(0.1, 0.55, 0.3);
-            grupo.add(hole);
+            // Pernas
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x2a4a2a });
+            const legGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.3, 6);
+            const leg1 = new THREE.Mesh(legGeo, legMat);
+            leg1.position.set(-0.15, 0.15, 0);
+            grupo.add(leg1);
+            const leg2 = new THREE.Mesh(legGeo, legMat);
+            leg2.position.set(0.15, 0.15, 0);
+            grupo.add(leg2);
+
+            // Marca de sangue
+            const sangueMat = new THREE.MeshStandardMaterial({ 
+                color: 0x881111, 
+                emissive: 0x441111,
+                emissiveIntensity: 0.2
+            });
+            const sangue = new THREE.Mesh(new THREE.SphereGeometry(0.05, 4, 4), sangueMat);
+            sangue.position.set(0.1, 0.3, -0.3);
+            grupo.add(sangue);
 
             grupo.position.set(x, 0, z);
             
-            const velocidade = 0.7 + Math.random() * 0.8;
-            const tamanho = 0.7 + Math.random() * 0.4;
+            const velocidade = 0.8 + Math.random() * 0.7;
+            const tamanho = 0.7 + Math.random() * 0.5;
             grupo.scale.set(tamanho, tamanho, tamanho);
 
-            // Efeito de brilho no zumbi (para identificar)
+            // Efeito de brilho no zumbi
             const glowZMat = new THREE.MeshStandardMaterial({
                 color: 0xff0000,
                 emissive: 0xff0000,
@@ -414,9 +467,11 @@
                 mesh: grupo,
                 velocidade: velocidade,
                 hp: 1,
-                tempoVida: 0
+                tempoVida: 0,
+                tamanho: tamanho
             };
             
+            totalZombiesSpawned++;
             return zombieData;
         }
 
@@ -435,7 +490,7 @@
             proj.castShadow = true;
             scene.add(proj);
 
-            // Rastro de luz
+            // Rastro
             const trailMat = new THREE.MeshStandardMaterial({
                 color: 0x44ffaa,
                 emissive: 0x44ffaa,
@@ -448,7 +503,7 @@
             trail.position.y = 0.5;
             scene.add(trail);
 
-            const velocidade = 14;
+            const velocidade = 16;
             const dir = direcao.clone().normalize();
             
             projectiles.push({
@@ -467,15 +522,17 @@
         let anguloJogador = 0;
         let podeAtirar = true;
         let cooldownTimer = 0;
-        const cooldownMax = 0.15;
+        const cooldownMax = 0.12;
 
         const pontuacaoSpan = document.getElementById('pontuacao');
         const vidasSpan = document.getElementById('vidas');
         const zumbisSpan = document.getElementById('zumbisRestantes');
         const gameoverDiv = document.getElementById('gameover');
         const pontuacaoFinalSpan = document.getElementById('pontuacaoFinal');
+        const zumbisMortosFinalSpan = document.getElementById('zumbisMortosFinal');
         const reiniciarBtn = document.getElementById('reiniciar');
         const cooldownDiv = document.getElementById('cooldown');
+        const mensagemDiv = document.getElementById('mensagem');
 
         // --- Teclas (WASD) ---
         const teclas = {
@@ -505,7 +562,6 @@
         const mouse = new THREE.Vector2();
         let mouseWorldPos = new THREE.Vector3(0, 0, 1);
 
-        // Atualizar mira com o movimento do mouse
         renderer.domElement.addEventListener('mousemove', (event) => {
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -527,9 +583,8 @@
             }
         });
 
-        // Clique para atirar
         renderer.domElement.addEventListener('mousedown', (event) => {
-            if (event.button !== 0) return; // Apenas botão esquerdo
+            if (event.button !== 0) return;
             if (gameOver) return;
             if (!podeAtirar) return;
             
@@ -546,7 +601,6 @@
             }
         });
 
-        // Impedir menu de contexto
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
         // --- Reiniciar ---
@@ -564,11 +618,18 @@
             
             vidas = 3;
             pontuacao = 0;
+            zombiesMortos = 0;
+            totalZombiesSpawned = 0;
             gameOver = false;
             spawnTimer = 0;
             podeAtirar = true;
             cooldownTimer = 0;
             cooldownDiv.style.display = 'none';
+            mensagemDiv.style.display = 'block';
+            mensagemDiv.textContent = '⚔️ PREPARE-SE! ⚔️';
+            setTimeout(() => {
+                mensagemDiv.style.display = 'none';
+            }, 1500);
             
             playerGroup.position.set(0, 0, 0);
             playerGroup.rotation.y = 0;
@@ -578,8 +639,8 @@
             zumbisSpan.textContent = '🧟 0';
             gameoverDiv.style.display = 'none';
             
-            // Spawn inicial
-            for (let i = 0; i < 8; i++) {
+            // Spawn inicial com muitos zumbis
+            for (let i = 0; i < 15; i++) {
                 const zumbi = criarZumbi();
                 if (zumbi) zombies.push(zumbi);
             }
@@ -588,12 +649,19 @@
 
         reiniciarBtn.addEventListener('click', reiniciarJogo);
 
-        // --- Spawn inicial ---
-        for (let i = 0; i < 8; i++) {
+        // --- Spawn inicial (muitos zumbis) ---
+        for (let i = 0; i < 15; i++) {
             const zumbi = criarZumbi();
             if (zumbi) zombies.push(zumbi);
         }
         zumbisSpan.textContent = '🧟 ' + zombies.length;
+
+        // Mostrar mensagem inicial
+        mensagemDiv.style.display = 'block';
+        mensagemDiv.textContent = '⚔️ SOBREVIVA! ⚔️';
+        setTimeout(() => {
+            mensagemDiv.style.display = 'none';
+        }, 2000);
 
         // --- Loop principal ---
         let clock = new THREE.Clock();
@@ -606,8 +674,8 @@
                 // --- Cooldown do tiro ---
                 if (!podeAtirar) {
                     cooldownTimer -= delta;
-                    const percent = (cooldownTimer / cooldownMax) * 100;
-                    cooldownDiv.textContent = '⏳ ' + Math.ceil(percent) + '%';
+                    const percent = Math.max(0, Math.ceil((cooldownTimer / cooldownMax) * 100));
+                    cooldownDiv.textContent = '⏳ ' + percent + '%';
                     if (cooldownTimer <= 0) {
                         podeAtirar = true;
                         cooldownDiv.style.display = 'none';
@@ -615,7 +683,7 @@
                 }
 
                 // --- Movimento do jogador ---
-                const velocidadeJogador = 4.5;
+                const velocidadeJogador = 5.0;
                 const movimento = new THREE.Vector3(0, 0, 0);
                 
                 if (teclas.w) movimento.z -= velocidadeJogador * delta;
@@ -628,28 +696,29 @@
                 playerGroup.position.x += movimento.x;
                 playerGroup.position.z += movimento.z;
                 
-                const raio = 8.0;
+                const raio = 8.5;
                 const dist = Math.sqrt(playerGroup.position.x ** 2 + playerGroup.position.z ** 2);
                 if (dist > raio) {
                     playerGroup.position.x = (playerGroup.position.x / dist) * raio;
                     playerGroup.position.z = (playerGroup.position.z / dist) * raio;
                 }
 
-                // --- Spawn de zumbis (mais agressivo) ---
+                // --- Spawn de zumbis (MUITOS) ---
                 spawnTimer += delta;
-                const spawnRate = Math.max(0.3, spawnInterval - pontuacao * 0.002);
+                const spawnRate = Math.max(0.2, spawnInterval - pontuacao * 0.001);
+                
+                // Spawn em ondas
                 if (spawnTimer >= spawnRate && zombies.length < maxZombies) {
                     spawnTimer = 0;
-                    // Spawn múltiplo conforme pontuação
-                    const quantidade = 1 + Math.floor(pontuacao / 15);
-                    for (let i = 0; i < Math.min(quantidade, 3); i++) {
+                    const quantidade = 1 + Math.floor(pontuacao / 10) + Math.floor(Math.random() * 2);
+                    for (let i = 0; i < Math.min(quantidade, 5); i++) {
                         const zumbi = criarZumbi();
                         if (zumbi) zombies.push(zumbi);
                     }
                     zumbisSpan.textContent = '🧟 ' + zombies.length;
                 }
 
-                // --- Movimento dos zumbis ---
+                // --- Movimento dos zumbis (em direção ao jogador) ---
                 const playerPos = playerGroup.position;
                 for (let i = zombies.length - 1; i >= 0; i--) {
                     const z = zombies[i];
@@ -661,17 +730,44 @@
                     
                     if (distZumbi > 0.3) {
                         dir.normalize();
-                        const velocidadeAtual = z.velocidade * (1 + pontuacao * 0.005);
+                        const velocidadeAtual = z.velocidade * (1 + pontuacao * 0.003);
                         zPos.x += dir.x * velocidadeAtual * delta;
                         zPos.z += dir.z * velocidadeAtual * delta;
                     }
                     
                     z.mesh.rotation.y = Math.atan2(dir.x, dir.z);
                     
+                    // Animação dos braços (agitação)
+                    const braco1 = z.mesh.children.find(c => c.position.x < -0.3 && c.position.y === 0.3);
+                    const braco2 = z.mesh.children.find(c => c.position.x > 0.3 && c.position.y === 0.3);
+                    if (braco1) braco1.rotation.x = Math.sin(elapsedTime * 5 + i) * 0.2 - 0.3;
+                    if (braco2) braco2.rotation.x = Math.sin(elapsedTime * 5 + i + 1) * 0.2 - 0.3;
+                    
                     // Colisão com o jogador
                     if (distZumbi < 0.8) {
                         vidas--;
                         vidasSpan.textContent = '❤️ ' + vidas;
+                        
+                        // Efeito de explosão
+                        for (let k = 0; k < 10; k++) {
+                            const partMat = new THREE.MeshStandardMaterial({
+                                color: 0xff4444,
+                                emissive: 0xff4444,
+                                emissiveIntensity: 0.5
+                            });
+                            const part = new THREE.Mesh(new THREE.SphereGeometry(0.05, 4, 4), partMat);
+                            part.position.copy(zPos);
+                            part.position.y = 0.5;
+                            const dirPart = new THREE.Vector3(
+                                (Math.random() - 0.5) * 2,
+                                Math.random() * 2,
+                                (Math.random() - 0.5) * 2
+                            ).normalize();
+                            part.userData.vel = dirPart.multiplyScalar(2 + Math.random() * 2);
+                            scene.add(part);
+                            // Remover após animação
+                            setTimeout(() => scene.remove(part), 400);
+                        }
                         
                         scene.remove(z.mesh);
                         zombies.splice(i, 1);
@@ -680,14 +776,15 @@
                         if (vidas <= 0) {
                             gameOver = true;
                             pontuacaoFinalSpan.textContent = pontuacao;
+                            zumbisMortosFinalSpan.textContent = zombiesMortos;
                             gameoverDiv.style.display = 'block';
                         }
                         continue;
                     }
                     
-                    // Remover se saiu da arena
+                    // Remover se saiu muito longe
                     const distArena = Math.sqrt(zPos.x ** 2 + zPos.z ** 2);
-                    if (distArena > 9.0) {
+                    if (distArena > 10.5) {
                         scene.remove(z.mesh);
                         zombies.splice(i, 1);
                         zumbisSpan.textContent = '🧟 ' + zombies.length;
@@ -710,9 +807,9 @@
                     for (let j = zombies.length - 1; j >= 0; j--) {
                         const z = zombies[j];
                         const distProj = p.mesh.position.distanceTo(z.mesh.position);
-                        if (distProj < 0.8) {
-                            // Efeito de explosão (partículas simples)
-                            for (let k = 0; k < 8; k++) {
+                        if (distProj < 0.7) {
+                            // Efeito de explosão verde
+                            for (let k = 0; k < 12; k++) {
                                 const partMat = new THREE.MeshStandardMaterial({
                                     color: 0x44ff44,
                                     emissive: 0x44ff44,
@@ -721,16 +818,20 @@
                                 const part = new THREE.Mesh(new THREE.SphereGeometry(0.04, 4, 4), partMat);
                                 part.position.copy(z.mesh.position);
                                 part.position.y = 0.5;
+                                const dirPart = new THREE.Vector3(
+                                    (Math.random() - 0.5) * 2,
+                                    Math.random() * 2,
+                                    (Math.random() - 0.5) * 2
+                                ).normalize();
+                                part.userData.vel = dirPart.multiplyScalar(2 + Math.random() * 2);
                                 scene.add(part);
-                                // Animação simples com setTimeout
-                                setTimeout(() => {
-                                    scene.remove(part);
-                                }, 300);
+                                setTimeout(() => scene.remove(part), 350);
                             }
                             
                             scene.remove(z.mesh);
                             zombies.splice(j, 1);
                             pontuacao++;
+                            zombiesMortos++;
                             pontuacaoSpan.textContent = '💀 ' + pontuacao;
                             zumbisSpan.textContent = '🧟 ' + zombies.length;
                             hit = true;
@@ -739,16 +840,16 @@
                     }
                     
                     if (hit || p.vida <= 0 || 
-                        Math.abs(p.mesh.position.x) > 9 || 
-                        Math.abs(p.mesh.position.z) > 9) {
+                        Math.abs(p.mesh.position.x) > 10 || 
+                        Math.abs(p.mesh.position.z) > 10) {
                         scene.remove(p.mesh);
                         if (p.trail) scene.remove(p.trail);
                         projectiles.splice(i, 1);
                     }
                 }
 
-                // Aumentar maxZombies gradualmente
-                maxZombies = 35 + Math.floor(pontuacao / 5);
+                // Aumentar maxZombies
+                maxZombies = 50 + Math.floor(pontuacao / 5);
             }
 
             renderer.render(scene, camera);
